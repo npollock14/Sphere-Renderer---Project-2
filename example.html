@@ -1,33 +1,108 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>WebGL Example File</title>
- 
-	<script id="vshader" type="x-shader/x-vertex">
-	void main() {
-  	}
-	</script>
-	
-	<script id="fshader" type="x-shader/x-fragment">
-	void main() 
-	{
-  	}
-	</script>
-	
-    <script src="lib/webgl-utils.js"></script>
-    <script src="lib/initShaders.js"></script>
-    <script src="lib/MV.js"></script>
-    
-    <script src="example.js"></script>
+<html>
 
-  </head>
- 
-  <body onload="main()">
-  
-    <canvas id="webgl" width="400" height="400">
-    	Please use a browser that supports the "canvas" tag.
-    </canvas>
+<script id="vertex-shader" type="x-shader/x-vertex">
 
-  </body>
+// assume both position and normal are in homogeneous form
+precision mediump float;
+
+attribute vec4 vPosition;
+attribute vec4 vNormal;
+
+uniform vec4 ambientProduct, diffuseProduct, specularProduct;
+
+
+uniform vec4 lightPosition;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+uniform float lightingType;
+uniform float shininess;
+
+
+
+varying vec4 fColor;
+varying vec3 L, N, V;
+
+
+
+void main()
+{
+
+
+   
+    if(lightingType == 2.0){  //phong
+    vec3 pos = (modelViewMatrix * vPosition).xyz;
+    L = normalize(lightPosition.xyz - pos);
+    N = normalize(modelViewMatrix * vNormal).xyz;
+    V = normalize(-pos);
+
+    gl_Position = projectionMatrix * modelViewMatrix * vPosition;
+	//fColor = vec4( 1.0, 0.0, 1.0, 1.0 );
+    }else if(lightingType == 1.0){ //gouraud
+        //Diffuse
+    vec3 pos = (modelViewMatrix * vPosition).xyz; // was originally flatShading
+    L = normalize(lightPosition.xyz - pos);
+    N = normalize(modelViewMatrix * vNormal).xyz;
+    V =  normalize(-pos);
+
+    vec4 diffuse = diffuseProduct * dot(L, N);
+
+    //Specular
+    vec3 R = (2.0 * dot(L, N) * N) - L;
+    vec4 specular = specularProduct * pow(max(dot(V, R), 0.0), shininess);
+
+    //Ambient
+    vec4 ambient = ambientProduct;
+
+    gl_Position = projectionMatrix * modelViewMatrix * vPosition;
+	fColor = diffuse + specular + ambient;
+	fColor.a = 1.0;
+    }
+}
+</script>
+
+<script id="fragment-shader" type="x-shader/x-fragment">
+
+precision mediump float;
+
+uniform vec4 ambientProduct, diffuseProduct, specularProduct;
+uniform float shininess;
+uniform float lightingType;
+
+varying vec3 L, N, V;
+varying vec4 fColor;
+
+
+void main()
+{
+
+    if(lightingType == 2.0){  //phong
+	vec3 R = (2.0 * dot(L, N) * N) - L;
+    vec4 diffuse = diffuseProduct * dot(L, N);
+    vec4 ambient = ambientProduct;
+    vec4 specular = specularProduct * pow(max(dot(V, R), 0.0), shininess);
+
+    vec4 fColor = diffuse + specular + ambient;
+    fColor.a = 1.0;
+    gl_FragColor = fColor;
+
+    }else if(lightingType == 1.0){ //gouraud
+        gl_FragColor = fColor;
+    }
+
+
+}
+</script>
+
+<script type="text/javascript" src="lib/webgl-utils.js"></script>
+<script type="text/javascript" src="lib/initShaders.js"></script>
+
+<script type="text/javascript" src="lib/MV.js"></script>
+<script type="text/javascript" src="example.js"></script>
+
+<body>
+<canvas id="gl-canvas" width="512" height="512">
+Epic fail!
+</canvas>
+</body>
 </html>
