@@ -1,38 +1,35 @@
 var canvas;
 var gl;
 
-var numTimesToSubdivide = 2;
+var numTimesToSubdivide = 5;
 
-var wireframe = true;
-var lightingMode = 1; // 0 is none, 1 is gouraud, 2 is phong
-
+var lightingMode = 1; // 0 is wireframe, 1 is gouraud, 2 is phong
+var lightingModeStrings = ["wireframe", "gouraud", "phong"];
+var prevMode = 1;
 var index = 0;
+
+var alpha = 0;
 
 var pointsArray = [];
 var normalsArray = [];
+var gouraudNormals = [];
 
-var near = -10;
-var far = 10;
+var program;
 
-var left = -3.0;
-var right = 3.0;
-var ytop = 3.0;
-var bottom = -3.0;
-
-var va = vec4(0.0, 0.0, -1.0, 1);
-var vb = vec4(0.0, 0.942809, 0.333333, 1);
-var vc = vec4(-0.816497, -0.471405, 0.333333, 1);
-var vd = vec4(0.816497, -0.471405, 0.333333, 1);
+const va = vec4(0.0, 0.0, -1.0, 1);
+const vb = vec4(0.0, 0.942809, 0.333333, 1);
+const vc = vec4(-0.816497, -0.471405, 0.333333, 1);
+const vd = vec4(0.816497, -0.471405, 0.333333, 1);
 
 var lightPosition = vec4(1.0, 1.0, 1.0, 0.0);
 var lightAmbient = vec4(0.2, 0.2, 0.2, 1.0);
 var lightDiffuse = vec4(1.0, 1.0, 1.0, 1.0);
 var lightSpecular = vec4(1.0, 1.0, 1.0, 1.0);
 
-var materialAmbient = vec4(1.0, 0.0, 1.0, 1.0);
-var materialDiffuse = vec4(1.0, 0.8, 0.0, 1.0);
-var materialSpecular = vec4(1.0, 1.0, 1.0, 1.0);
-var materialShininess = 20.0;
+const materialAmbient = vec4(1.0, 0.0, 1.0, 1.0);
+const materialDiffuse = vec4(1.0, 0.8, 0.0, 1.0);
+const materialSpecular = vec4(1.0, 1.0, 1.0, 1.0);
+const materialShininess = 20.0;
 
 var modelViewMatrix, projectionMatrix;
 var modelViewMatrixLoc, projectionMatrixLoc;
@@ -46,13 +43,33 @@ function triangle(a, b, c) {
   pointsArray.push(b);
   pointsArray.push(c);
 
-  // normals are vectors
+  //calculate a normal using newell's method and add it to the gouraudNormals array
+  //we use the single normal for all three vertices as required by the assignment
+  let normal = getNewellNormal([a, b, c, a]);
+  gouraudNormals.push(normal);
+  gouraudNormals.push(normal);
+  gouraudNormals.push(normal);
 
   normalsArray.push(a[0], a[1], a[2], 0.0);
   normalsArray.push(b[0], b[1], b[2], 0.0);
   normalsArray.push(c[0], c[1], c[2], 0.0);
 
   index += 3;
+}
+
+function getNewellNormal(pts) {
+  let normal = vec4(0.0, 0.0, 0.0, 0.0);
+  for (let i = 0; i < 3; i++) {
+    normal[0] += (pts[i][1] - pts[i + 1][1]) * (pts[i][2] + pts[i + 1][2]);
+  }
+  for (let i = 0; i < 3; i++) {
+    normal[1] += (pts[i][2] - pts[i + 1][2]) * (pts[i][0] + pts[i + 1][0]);
+  }
+  for (let i = 0; i < 3; i++) {
+    normal[2] += (pts[i][0] - pts[i + 1][0]) * (pts[i][1] + pts[i + 1][1]);
+  }
+
+  return vec4(-normal[0], -normal[1], -normal[2], 0.0);
 }
 
 function divideTriangle(a, b, c, count) {
@@ -81,28 +98,11 @@ function tetrahedron(a, b, c, d, n) {
   divideTriangle(a, c, d, n);
 }
 
-window.onload = function init() {
-  canvas = document.getElementById("gl-canvas");
-
-  gl = WebGLUtils.setupWebGL(canvas);
-  if (!gl) {
-    alert("WebGL isn't available");
-  }
-
-  gl.viewport(0, 0, canvas.width, canvas.height);
-  gl.clearColor(1.0, 1.0, 1.0, 1.0);
-
-  gl.enable(gl.DEPTH_TEST);
-
-  //
-  //  Load shaders and initialize attribute buffers
-  //
-  var program = initShaders(gl, "vertex-shader", "fragment-shader");
-  gl.useProgram(program);
-
-  var diffuseProduct = mult(lightDiffuse, materialDiffuse);
-  var specularProduct = mult(lightSpecular, materialSpecular);
-  var ambientProduct = mult(lightAmbient, materialAmbient);
+function updateModel() {
+  pointsArray = [];
+  normalsArray = [];
+  gouraudNormals = [];
+  index = 0;
 
   tetrahedron(va, vb, vc, vd, numTimesToSubdivide);
 
@@ -121,6 +121,40 @@ window.onload = function init() {
   var vNormalPosition = gl.getAttribLocation(program, "vNormal");
   gl.vertexAttribPointer(vNormalPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vNormalPosition);
+
+  var vNormalG = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vNormalG);
+  gl.bufferData(gl.ARRAY_BUFFER, flatten(gouraudNormals), gl.STATIC_DRAW);
+
+  var vNormalGPosition = gl.getAttribLocation(program, "vNormalG");
+  gl.vertexAttribPointer(vNormalGPosition, 4, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(vNormalGPosition);
+}
+
+window.onload = function init() {
+  canvas = document.getElementById("gl-canvas");
+
+  gl = WebGLUtils.setupWebGL(canvas);
+  if (!gl) {
+    alert("WebGL isn't available");
+  }
+
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+  gl.enable(gl.DEPTH_TEST);
+
+  //
+  //  Load shaders and initialize attribute buffers
+  //
+  program = initShaders(gl, "vertex-shader", "fragment-shader");
+  gl.useProgram(program);
+
+  var diffuseProduct = mult(lightDiffuse, materialDiffuse);
+  var specularProduct = mult(lightSpecular, materialSpecular);
+  var ambientProduct = mult(lightAmbient, materialAmbient);
+
+  updateModel();
 
   modelViewMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
   projectionMatrixLoc = gl.getUniformLocation(program, "projectionMatrix");
@@ -147,19 +181,75 @@ window.onload = function init() {
   render();
 };
 
+// add key down event listener
+window.addEventListener("keydown", function (event) {
+  switch (event.key) {
+    case "m":
+      if (lightingMode == 0) {
+        lightingMode = prevMode;
+      } else {
+        prevMode = lightingMode;
+        lightingMode = 0;
+      }
+      console.log("lighting mode: " + lightingModeStrings[lightingMode]);
+      gl.uniform1f(
+        gl.getUniformLocation(program, "lightingType"),
+        lightingMode
+      );
+
+      break;
+    case "l":
+      if (lightingMode == 1) {
+        lightingMode = 2;
+      } else if (lightingMode == 2) {
+        lightingMode = 1;
+      }
+      console.log("lighting mode: " + lightingModeStrings[lightingMode]);
+      gl.uniform1f(
+        gl.getUniformLocation(program, "lightingType"),
+        lightingMode
+      );
+      break;
+    case "q": //decrease subdivisions
+      if (numTimesToSubdivide > 0) {
+        numTimesToSubdivide--;
+        updateModel();
+        console.log("subdivisions: " + numTimesToSubdivide);
+      }
+      break;
+    case "e": //increase subdivisions
+      if (numTimesToSubdivide < 8) {
+        numTimesToSubdivide++;
+        updateModel();
+        console.log("subdivisions: " + numTimesToSubdivide);
+      }
+      break;
+  }
+});
+
 function render() {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   eye = vec3(0, 0, 1.5);
 
-  modelViewMatrix = lookAt(eye, at, up);
-  projectionMatrix = ortho(left, right, bottom, ytop, near, far);
+  modelViewMatrix = translate(0.0, 0.0, -1.0);
+  modelViewMatrix = mult(modelViewMatrix, rotateX(alpha));
+  modelViewMatrix = mult(modelViewMatrix, rotateY(alpha));
+
+  alpha += 0.25;
+  modelViewMatrix = mult(lookAt(eye, at, up), modelViewMatrix);
+  // perspecive projection
+  projectionMatrix = perspective(80, 1, 0.1, 10);
 
   gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
   gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
 
-  for (var i = 0; i < index; i += 3) gl.drawArrays(gl.TRIANGLES, i, 3);
-  if (wireframe) {
-    for (var i = 0; i < index; i += 3) gl.drawArrays(gl.LINES, i, 3);
+  if (lightingMode == 0) {
+    for (var i = 0; i < index; i += 3) {
+      gl.drawArrays(gl.LINE_STRIP, i, 3);
+    }
+  } else {
+    for (var i = 0; i < index; i += 3) gl.drawArrays(gl.TRIANGLES, i, 3);
   }
+  requestAnimFrame(render);
 }
