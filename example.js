@@ -11,6 +11,7 @@ var index = 0;
 var alpha = 0;
 
 var pointsArray = [];
+var avgArray = [];
 var normalsArray = [];
 var gouraudNormals = [];
 
@@ -31,6 +32,15 @@ const materialDiffuse = vec4(1.0, 0.8, 0.0, 1.0);
 const materialSpecular = vec4(1.0, 1.0, 1.0, 1.0);
 const materialShininess = 20.0;
 
+const chankinControls = [
+  [-8.0, 8.0],
+  [2.0, 4.0],
+  [6.0, 6.0],
+  [10, -8.0],
+  [2.0, -2.0],
+  [-6.0, -2.0],
+];
+
 var modelViewMatrix, projectionMatrix;
 var modelViewMatrixLoc, projectionMatrixLoc;
 
@@ -42,6 +52,16 @@ function triangle(a, b, c) {
   pointsArray.push(a);
   pointsArray.push(b);
   pointsArray.push(c);
+
+  //push the average of the points to the avgArray
+  avgArray.push(
+    vec4(
+      (a[0] + b[0] + c[0]) / 3,
+      (a[1] + b[1] + c[1]) / 3,
+      (a[2] + b[2] + c[2]) / 3,
+      1.0
+    )
+  );
 
   //calculate a normal using newell's method and add it to the gouraudNormals array
   //we use the single normal for all three vertices as required by the assignment
@@ -100,6 +120,7 @@ function tetrahedron(a, b, c, d, n) {
 
 function updateModel() {
   pointsArray = [];
+  avgArray = [];
   normalsArray = [];
   gouraudNormals = [];
   index = 0;
@@ -113,6 +134,14 @@ function updateModel() {
   var vPosition = gl.getAttribLocation(program, "vPosition");
   gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vPosition);
+
+  var vAvgBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vAvgBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, flatten(avgArray), gl.STATIC_DRAW);
+
+  var vAvgPosition = gl.getAttribLocation(program, "vAvg");
+  gl.vertexAttribPointer(vAvgPosition, 4, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(vAvgPosition);
 
   var vNormal = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vNormal);
@@ -236,7 +265,7 @@ function render() {
   modelViewMatrix = mult(modelViewMatrix, rotateX(alpha));
   modelViewMatrix = mult(modelViewMatrix, rotateY(alpha));
 
-  alpha += 0.25;
+  //alpha += 0.25;
   modelViewMatrix = mult(lookAt(eye, at, up), modelViewMatrix);
   // perspecive projection
   projectionMatrix = perspective(80, 1, 0.1, 10);
