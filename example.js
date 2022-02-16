@@ -2,7 +2,7 @@ var canvas;
 var gl;
 
 var numTimesToSubdivide = 5;
-var chankinSubDivisions = 5;
+var chankinSubDivisions = 0;
 
 var lightingMode = 0; // 0 is wireframe, 1 is gouraud, 2 is phong
 var lightingModeStrings = ["wireframe", "gouraud", "phong"];
@@ -11,9 +11,15 @@ var index = 0;
 
 var alpha = 0;
 
+var animation = false;
+
+var localPointsArray = [];
 var pointsArray = [];
+var chankinPath = [];
 var normalsArray = [];
 var gouraudNormals = [];
+
+var modelPos;
 
 var program;
 
@@ -39,22 +45,27 @@ const chankinControls = [
   [10, -8.0],
   [2.0, -2.0],
   [-6.0, -2.0],
-  [-8.0, 8.0]
 ];
-
-var chankinPath = [];
 
 var modelViewMatrix, projectionMatrix;
 var modelViewMatrixLoc, projectionMatrixLoc;
 
+var vBuffer;
+var chankinBuffer;
+var vPosition;
+var vNormal;
+var vNormalPosition;
+var vNormalG;
+var vNormalGPosition;
+
 var eye;
 var at = vec3(0.0, 0.0, 0.0);
-var up = vec3(0.0, 1.0, 0.0);
+var up = vec3(0.0, 0.0, 0.0);
 
 function triangle(a, b, c) {
-  pointsArray.push(a);
-  pointsArray.push(b);
-  pointsArray.push(c);
+  localPointsArray.push(a);
+  localPointsArray.push(b);
+  localPointsArray.push(c);
 
   //calculate a normal using newell's method and add it to the gouraudNormals array
   //we use the single normal for all three vertices as required by the assignment
@@ -87,22 +98,19 @@ function getNewellNormal(pts) {
 
 //perform chankin subdivision on a set of controll points
 // use 1/4 and 3/4 mixings for the new points
-function chankinSubDivide(pts, n){
-  if(n > 0){
+function chankinSubDivide(pts, n) {
+  if (n > 0) {
     let newPts = [];
-    for(let i = 0; i < pts.length-1; i++){
-      let p1 = mix(pts[i], pts[i+1], 0.25);
-      let p2 = mix(pts[i], pts[i+1], 0.75);
+    for (let i = 0; i < pts.length; i++) {
+      let p1 = mix(pts[i], pts[(i + 1) % pts.length], 0.25);
+      let p2 = mix(pts[i], pts[(i + 1) % pts.length], 0.75);
       newPts.push(p1);
       newPts.push(p2);
-      //console.log(newPts);
-
     }
-    return chankinSubDivide(newPts, n-1);
-
-}else{
-  return pts;
-}
+    return chankinSubDivide(newPts, n - 1);
+  } else {
+    return pts;
+  }
 }
 
 function controlToVector(chankinControls) {
@@ -139,52 +147,53 @@ function tetrahedron(a, b, c, d, n) {
   divideTriangle(a, c, d, n);
 }
 
+function makeBuffers() {
+  vBuffer = gl.createBuffer();
+  chankinBuffer = gl.createBuffer();
+  vPosition = gl.getAttribLocation(program, "vPosition");
+  vNormal = gl.createBuffer();
+  vNormalPosition = gl.getAttribLocation(program, "vNormal");
+  vNormalG = gl.createBuffer();
+  vNormalGPosition = gl.getAttribLocation(program, "vNormalG");
+}
+
 function updateModel() {
-  pointsArray = [];
+  localPointsArray = [];
   normalsArray = [];
   gouraudNormals = [];
   index = 0;
-
   tetrahedron(va, vb, vc, vd, numTimesToSubdivide);
+}
 
-  var vBuffer = gl.createBuffer();
+function bufferModel() {
   gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, flatten(pointsArray), gl.STATIC_DRAW);
 
-  var vPosition = gl.getAttribLocation(program, "vPosition");
   gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vPosition);
 
-  var vNormal = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vNormal);
   gl.bufferData(gl.ARRAY_BUFFER, flatten(normalsArray), gl.STATIC_DRAW);
 
-  var vNormalPosition = gl.getAttribLocation(program, "vNormal");
   gl.vertexAttribPointer(vNormalPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vNormalPosition);
 
-  var vNormalG = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vNormalG);
   gl.bufferData(gl.ARRAY_BUFFER, flatten(gouraudNormals), gl.STATIC_DRAW);
 
-  var vNormalGPosition = gl.getAttribLocation(program, "vNormalG");
   gl.vertexAttribPointer(vNormalGPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vNormalGPosition);
 }
 
-function updateChankin(){
+function updateChankin() {
   chankinPath = [];
   let chankinVecs = controlToVector(chankinControls);
   chankinPath = chankinSubDivide(chankinVecs, chankinSubDivisions);
-  console.log(chankinPath);
+}
 
-  var vBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
+function bufferChankin() {
+  gl.bindBuffer(gl.ARRAY_BUFFER, chankinBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, flatten(chankinPath), gl.STATIC_DRAW);
-
-  var vPosition = gl.getAttribLocation(program, "vPosition");
-  gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
-  gl.enableVertexAttribArray(vPosition);
 }
 
 window.onload = function init() {
@@ -206,13 +215,17 @@ window.onload = function init() {
   program = initShaders(gl, "vertex-shader", "fragment-shader");
   gl.useProgram(program);
 
+  makeBuffers();
+
   var diffuseProduct = mult(lightDiffuse, materialDiffuse);
   var specularProduct = mult(lightSpecular, materialSpecular);
   var ambientProduct = mult(lightAmbient, materialAmbient);
-  
-  updateChankin();
 
-  // updateModel();
+  updateChankin();
+  bufferChankin();
+  updateModel();
+  setModelPos(chankinPath[2]);
+  bufferModel();
 
   modelViewMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
   projectionMatrixLoc = gl.getUniformLocation(program, "projectionMatrix");
@@ -250,10 +263,7 @@ window.addEventListener("keydown", function (event) {
         lightingMode = 0;
       }
       console.log("lighting mode: " + lightingModeStrings[lightingMode]);
-      gl.uniform1f(
-        gl.getUniformLocation(program, "lightingType"),
-        lightingMode
-      );
+      setLightingMode(lightingMode);
 
       break;
     case "l":
@@ -263,15 +273,13 @@ window.addEventListener("keydown", function (event) {
         lightingMode = 1;
       }
       console.log("lighting mode: " + lightingModeStrings[lightingMode]);
-      gl.uniform1f(
-        gl.getUniformLocation(program, "lightingType"),
-        lightingMode
-      );
+      setLightingMode(lightingMode);
       break;
     case "q": //decrease subdivisions
       if (numTimesToSubdivide > 0) {
         numTimesToSubdivide--;
         updateModel();
+        bufferModel();
         console.log("subdivisions: " + numTimesToSubdivide);
       }
       break;
@@ -279,8 +287,29 @@ window.addEventListener("keydown", function (event) {
       if (numTimesToSubdivide < 8) {
         numTimesToSubdivide++;
         updateModel();
+        bufferModel();
         console.log("subdivisions: " + numTimesToSubdivide);
       }
+      break;
+    case "i": //increase subdivisions
+      if (chankinSubDivisions < 8) {
+        chankinSubDivisions++;
+        updateChankin();
+        bufferChankin();
+        console.log("subdivisions: " + chankinSubDivisions);
+      }
+      break;
+    case "j": //decrease subdivisions
+      if (chankinSubDivisions > 0) {
+        chankinSubDivisions--;
+        updateChankin();
+        bufferChankin();
+        console.log("subdivisions: " + chankinSubDivisions);
+      }
+      break;
+    case "a": //toggle animation
+      animation = !animation;
+      console.log("animation: " + animation);
       break;
   }
 });
@@ -288,12 +317,9 @@ window.addEventListener("keydown", function (event) {
 function render() {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  eye = vec3(0, 0, 1.5);
+  eye = vec3(0, 0.0, 0);
 
   modelViewMatrix = translate(0.0, 0.0, -1.0);
-  modelViewMatrix = mult(modelViewMatrix, rotateX(alpha));
-  modelViewMatrix = mult(modelViewMatrix, rotateY(alpha));
-
   //alpha += 0.25;
   modelViewMatrix = mult(lookAt(eye, at, up), modelViewMatrix);
   // perspecive projection
@@ -302,6 +328,17 @@ function render() {
   gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
   gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
 
+  drawChankin();
+
+  drawModel();
+
+  requestAnimFrame(render);
+}
+
+function drawModel() {
+  gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
+  gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(vPosition);
   if (lightingMode == 0) {
     for (var i = 0; i < index; i += 3) {
       gl.drawArrays(gl.LINE_STRIP, i, 3);
@@ -309,10 +346,28 @@ function render() {
   } else {
     for (var i = 0; i < index; i += 3) gl.drawArrays(gl.TRIANGLES, i, 3);
   }
-  drawChankin();
-  //requestAnimFrame(render);
 }
 
-function drawChankin(){
-  gl.drawArrays(gl.LINE_STRIP, 0, chankinPath.length);
+function drawChankin() {
+  setLightingMode(0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, chankinBuffer);
+  gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(vPosition);
+  gl.drawArrays(gl.LINE_LOOP, 0, chankinPath.length);
+  setLightingMode(lightingMode);
+}
+
+function setLightingMode(mode) {
+  gl.uniform1f(gl.getUniformLocation(program, "lightingType"), mode);
+}
+
+function setModelPos(pos) {
+  modelPos = pos;
+  pointsArray = [];
+  let centerOffset = vec4(-1.0, 1.0, 1.0, 0.0);
+  //offset all points in point array by modelPos
+  for (var i = 0; i < localPointsArray.length; i++) {
+    pointsArray[i] = add(localPointsArray[i], modelPos);
+    pointsArray[i] = add(pointsArray[i], centerOffset);
+  }
 }
