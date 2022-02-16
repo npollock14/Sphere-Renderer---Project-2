@@ -12,6 +12,7 @@ var index = 0;
 var alpha = 0;
 
 var animation = false;
+var animationSpeed = 0.05;
 
 var localPointsArray = [];
 var pointsArray = [];
@@ -20,6 +21,7 @@ var normalsArray = [];
 var gouraudNormals = [];
 
 var modelPos;
+var chankinPos = 4;
 
 var program;
 
@@ -157,12 +159,13 @@ function makeBuffers() {
   vNormalGPosition = gl.getAttribLocation(program, "vNormalG");
 }
 
-function updateModel() {
+function updateModel(pos = modelPos) {
   localPointsArray = [];
   normalsArray = [];
   gouraudNormals = [];
   index = 0;
   tetrahedron(va, vb, vc, vd, numTimesToSubdivide);
+  setModelPos(pos);
 }
 
 function bufferModel() {
@@ -185,10 +188,19 @@ function bufferModel() {
   gl.enableVertexAttribArray(vNormalGPosition);
 }
 
-function updateChankin() {
+function updateChankin(increaseSubs, init = false) {
   chankinPath = [];
   let chankinVecs = controlToVector(chankinControls);
   chankinPath = chankinSubDivide(chankinVecs, chankinSubDivisions);
+  if (!init) {
+    if (increaseSubs) {
+      chankinPos = (chankinPos * 2) % chankinPath.length;
+    } else {
+      //divide by 2 and round down
+      chankinPos = Math.floor(chankinPos / 2) % chankinPath.length;
+    }
+  }
+  setModelPos(chankinPath[chankinPos]);
 }
 
 function bufferChankin() {
@@ -221,10 +233,9 @@ window.onload = function init() {
   var specularProduct = mult(lightSpecular, materialSpecular);
   var ambientProduct = mult(lightAmbient, materialAmbient);
 
-  updateChankin();
+  updateChankin(false, true);
   bufferChankin();
-  updateModel();
-  setModelPos(chankinPath[2]);
+  updateModel(chankinPath[chankinPos]);
   bufferModel();
 
   modelViewMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
@@ -294,16 +305,19 @@ window.addEventListener("keydown", function (event) {
     case "i": //increase subdivisions
       if (chankinSubDivisions < 8) {
         chankinSubDivisions++;
-        updateChankin();
+        updateChankin(true);
         bufferChankin();
+        bufferModel();
+        // setModelPos(chankinPath[chankinPos]); // TODO: fix this
         console.log("subdivisions: " + chankinSubDivisions);
       }
       break;
     case "j": //decrease subdivisions
       if (chankinSubDivisions > 0) {
         chankinSubDivisions--;
-        updateChankin();
+        updateChankin(false);
         bufferChankin();
+        bufferModel();
         console.log("subdivisions: " + chankinSubDivisions);
       }
       break;
@@ -331,6 +345,19 @@ function render() {
   drawChankin();
 
   drawModel();
+
+  if (animation) {
+    //get the next position in the chankin path to determine the direction of travel
+    let nextPos = (chankinPos + 1) % chankinPath.length;
+    //get the vector between the current position and the next position
+    let dir = subtract(chankinPath[nextPos], chankinPath[chankinPos]);
+    //get a unit vector in the direction of travel
+    dir = normalize(dir);
+    //multiply the direction by the speed to the velocity
+    dir = scale(animationSpeed, dir);
+    setModelPos(add(modelPos, dir));
+    bufferModel();
+  }
 
   requestAnimFrame(render);
 }
@@ -364,7 +391,7 @@ function setLightingMode(mode) {
 function setModelPos(pos) {
   modelPos = pos;
   pointsArray = [];
-  let centerOffset = vec4(-1.0, 1.0, 1.0, 0.0);
+  let centerOffset = vec4(0, 0, 0, 0.0);
   //offset all points in point array by modelPos
   for (var i = 0; i < localPointsArray.length; i++) {
     pointsArray[i] = add(localPointsArray[i], modelPos);
