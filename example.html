@@ -16,7 +16,6 @@ uniform vec4 ambientProduct, diffuseProduct, specularProduct;
 
 
 uniform vec4 lightPosition;
-uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
 uniform float lightingType;
 uniform float shininess;
@@ -31,17 +30,17 @@ varying vec3 L, N, V;
 void main()
 {
     if(lightingType == 2.0){  //phong
-    vec3 pos = (modelViewMatrix * vPosition).xyz;
+    vec3 pos = (vPosition).xyz;
     L = normalize(lightPosition.xyz - pos);
-    N = normalize(modelViewMatrix * vNormal).xyz;
+    N = normalize(vNormal).xyz;
     V = normalize(-pos);
 
-    gl_Position = projectionMatrix * modelViewMatrix * vPosition;
+    gl_Position = projectionMatrix * vPosition;
     }else if(lightingType == 1.0){ //gouraud
         //Diffuse
-    vec3 pos = (modelViewMatrix * vPosition).xyz; // was originally flatShading
+    vec3 pos = (vPosition).xyz; // was originally flatShading
     L = normalize(lightPosition.xyz - pos);
-    N = normalize(modelViewMatrix * vNormalG).xyz;
+    N = normalize(vNormalG).xyz;
     V =  normalize(-pos);
 
     vec4 diffuse = diffuseProduct * dot(L, N);
@@ -53,11 +52,11 @@ void main()
     //Ambient
     vec4 ambient = ambientProduct;
 
-    gl_Position = projectionMatrix * modelViewMatrix * vPosition;
+    gl_Position = projectionMatrix * vPosition;
 	fColor = diffuse + ambient + specular;
 	fColor.a = 1.0;
     }else if(lightingType == 0.0){ //flat or wireframe mode
-        gl_Position = projectionMatrix * modelViewMatrix * vPosition;
+        gl_Position = projectionMatrix * vPosition;
     }
 }
 </script>
@@ -104,7 +103,7 @@ void main()
 <script type="text/javascript" src="example.js"></script>
 
 <body>
-<canvas id="gl-canvas" width="512" height="512">
+<canvas id="gl-canvas" width="1000" height="1000">
 Epic fail!
 </canvas>
 </body>

@@ -2,9 +2,9 @@ var canvas;
 var gl;
 
 var numTimesToSubdivide = 5;
-var chankinSubDivisions = 0;
+var chankinSubDivisions = 3;
 
-var lightingMode = 0; // 0 is wireframe, 1 is gouraud, 2 is phong
+var lightingMode = 2; // 0 is wireframe, 1 is gouraud, 2 is phong
 var lightingModeStrings = ["wireframe", "gouraud", "phong"];
 var prevMode = 1;
 var index = 0;
@@ -12,7 +12,7 @@ var index = 0;
 var alpha = 0;
 
 var animation = false;
-var animationSpeed = 0.05;
+var animationSpeed = 0.02;
 
 var localPointsArray = [];
 var pointsArray = [];
@@ -30,7 +30,7 @@ const vb = vec4(0.0, 0.942809, 0.333333, 1);
 const vc = vec4(-0.816497, -0.471405, 0.333333, 1);
 const vd = vec4(0.816497, -0.471405, 0.333333, 1);
 
-var lightPosition = vec4(1.0, 1.0, 1.0, 0.0);
+var lightPosition = vec4(0.0, 0.0, -10.0, 0.0);
 var lightAmbient = vec4(0.2, 0.2, 0.2, 1.0);
 var lightDiffuse = vec4(1.0, 1.0, 1.0, 1.0);
 var lightSpecular = vec4(1.0, 1.0, 1.0, 1.0);
@@ -49,8 +49,8 @@ const chankinControls = [
   [-6.0, -2.0],
 ];
 
-var modelViewMatrix, projectionMatrix;
-var modelViewMatrixLoc, projectionMatrixLoc;
+var projectionMatrix;
+var projectionMatrixLoc;
 
 var vBuffer;
 var chankinBuffer;
@@ -60,9 +60,9 @@ var vNormalPosition;
 var vNormalG;
 var vNormalGPosition;
 
-var eye;
-var at = vec3(0.0, 0.0, 0.0);
-var up = vec3(0.0, 0.0, 0.0);
+var eye = vec3(0, 0.0, 0);
+var at = vec3(0.0, 0.0, -1);
+var up = vec3(0.0, 1.0, 0.0);
 
 function triangle(a, b, c) {
   localPointsArray.push(a);
@@ -118,7 +118,7 @@ function chankinSubDivide(pts, n) {
 function controlToVector(chankinControls) {
   resArray = [];
   for (let i = 0; i < chankinControls.length; i++) {
-    resArray.push(vec4(chankinControls[i][0], chankinControls[i][1], -10.0, 1));
+    resArray.push(vec4(chankinControls[i][0], chankinControls[i][1], -12, 1));
   }
   return resArray;
 }
@@ -238,7 +238,6 @@ window.onload = function init() {
   updateModel(chankinPath[chankinPos]);
   bufferModel();
 
-  modelViewMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
   projectionMatrixLoc = gl.getUniformLocation(program, "projectionMatrix");
 
   gl.uniform4fv(
@@ -331,15 +330,9 @@ window.addEventListener("keydown", function (event) {
 function render() {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  eye = vec3(0, 0.0, 0);
-
-  modelViewMatrix = translate(0.0, 0.0, -1.0);
-  //alpha += 0.25;
-  modelViewMatrix = mult(lookAt(eye, at, up), modelViewMatrix);
   // perspecive projection
   projectionMatrix = perspective(90, 1, 0.1, 100);
 
-  gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
   gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
 
   drawChankin();
@@ -351,6 +344,21 @@ function render() {
     let nextPos = (chankinPos + 1) % chankinPath.length;
     //get the vector between the current position and the next position
     let dir = subtract(chankinPath[nextPos], chankinPath[chankinPos]);
+
+    //get the direction between the current model position and the next position
+    let modelDir = subtract(chankinPath[nextPos], modelPos);
+
+    //if dir and modelDir are in opposite directions, then we have reached the end of this path
+    if (dot(dir, modelDir) < 0) {
+      //set the model position to the next position in the chankin path
+      chankinPos++;
+      chankinPos %= chankinPath.length;
+      setModelPos(chankinPath[chankinPos]);
+      bufferModel();
+      nextPos = (chankinPos + 1) % chankinPath.length;
+      dir = subtract(chankinPath[nextPos], chankinPath[chankinPos]);
+      console.log("Here");
+    }
     //get a unit vector in the direction of travel
     dir = normalize(dir);
     //multiply the direction by the speed to the velocity
