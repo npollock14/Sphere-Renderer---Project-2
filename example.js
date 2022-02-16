@@ -2,8 +2,9 @@ var canvas;
 var gl;
 
 var numTimesToSubdivide = 5;
+var chankinSubDivisions = 5;
 
-var lightingMode = 1; // 0 is wireframe, 1 is gouraud, 2 is phong
+var lightingMode = 0; // 0 is wireframe, 1 is gouraud, 2 is phong
 var lightingModeStrings = ["wireframe", "gouraud", "phong"];
 var prevMode = 1;
 var index = 0;
@@ -11,7 +12,6 @@ var index = 0;
 var alpha = 0;
 
 var pointsArray = [];
-var avgArray = [];
 var normalsArray = [];
 var gouraudNormals = [];
 
@@ -39,7 +39,10 @@ const chankinControls = [
   [10, -8.0],
   [2.0, -2.0],
   [-6.0, -2.0],
+  [-8.0, 8.0]
 ];
+
+var chankinPath = [];
 
 var modelViewMatrix, projectionMatrix;
 var modelViewMatrixLoc, projectionMatrixLoc;
@@ -52,16 +55,6 @@ function triangle(a, b, c) {
   pointsArray.push(a);
   pointsArray.push(b);
   pointsArray.push(c);
-
-  //push the average of the points to the avgArray
-  avgArray.push(
-    vec4(
-      (a[0] + b[0] + c[0]) / 3,
-      (a[1] + b[1] + c[1]) / 3,
-      (a[2] + b[2] + c[2]) / 3,
-      1.0
-    )
-  );
 
   //calculate a normal using newell's method and add it to the gouraudNormals array
   //we use the single normal for all three vertices as required by the assignment
@@ -92,6 +85,34 @@ function getNewellNormal(pts) {
   return vec4(-normal[0], -normal[1], -normal[2], 0.0);
 }
 
+//perform chankin subdivision on a set of controll points
+// use 1/4 and 3/4 mixings for the new points
+function chankinSubDivide(pts, n){
+  if(n > 0){
+    let newPts = [];
+    for(let i = 0; i < pts.length-1; i++){
+      let p1 = mix(pts[i], pts[i+1], 0.25);
+      let p2 = mix(pts[i], pts[i+1], 0.75);
+      newPts.push(p1);
+      newPts.push(p2);
+      //console.log(newPts);
+
+    }
+    return chankinSubDivide(newPts, n-1);
+
+}else{
+  return pts;
+}
+}
+
+function controlToVector(chankinControls) {
+  resArray = [];
+  for (let i = 0; i < chankinControls.length; i++) {
+    resArray.push(vec4(chankinControls[i][0], chankinControls[i][1], -10.0, 1));
+  }
+  return resArray;
+}
+
 function divideTriangle(a, b, c, count) {
   if (count > 0) {
     var ab = mix(a, b, 0.5);
@@ -120,7 +141,6 @@ function tetrahedron(a, b, c, d, n) {
 
 function updateModel() {
   pointsArray = [];
-  avgArray = [];
   normalsArray = [];
   gouraudNormals = [];
   index = 0;
@@ -134,14 +154,6 @@ function updateModel() {
   var vPosition = gl.getAttribLocation(program, "vPosition");
   gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vPosition);
-
-  var vAvgBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vAvgBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, flatten(avgArray), gl.STATIC_DRAW);
-
-  var vAvgPosition = gl.getAttribLocation(program, "vAvg");
-  gl.vertexAttribPointer(vAvgPosition, 4, gl.FLOAT, false, 0, 0);
-  gl.enableVertexAttribArray(vAvgPosition);
 
   var vNormal = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vNormal);
@@ -158,6 +170,21 @@ function updateModel() {
   var vNormalGPosition = gl.getAttribLocation(program, "vNormalG");
   gl.vertexAttribPointer(vNormalGPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vNormalGPosition);
+}
+
+function updateChankin(){
+  chankinPath = [];
+  let chankinVecs = controlToVector(chankinControls);
+  chankinPath = chankinSubDivide(chankinVecs, chankinSubDivisions);
+  console.log(chankinPath);
+
+  var vBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, flatten(chankinPath), gl.STATIC_DRAW);
+
+  var vPosition = gl.getAttribLocation(program, "vPosition");
+  gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(vPosition);
 }
 
 window.onload = function init() {
@@ -182,8 +209,10 @@ window.onload = function init() {
   var diffuseProduct = mult(lightDiffuse, materialDiffuse);
   var specularProduct = mult(lightSpecular, materialSpecular);
   var ambientProduct = mult(lightAmbient, materialAmbient);
+  
+  updateChankin();
 
-  updateModel();
+  // updateModel();
 
   modelViewMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
   projectionMatrixLoc = gl.getUniformLocation(program, "projectionMatrix");
@@ -268,7 +297,7 @@ function render() {
   //alpha += 0.25;
   modelViewMatrix = mult(lookAt(eye, at, up), modelViewMatrix);
   // perspecive projection
-  projectionMatrix = perspective(80, 1, 0.1, 10);
+  projectionMatrix = perspective(90, 1, 0.1, 100);
 
   gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
   gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
@@ -280,5 +309,10 @@ function render() {
   } else {
     for (var i = 0; i < index; i += 3) gl.drawArrays(gl.TRIANGLES, i, 3);
   }
-  requestAnimFrame(render);
+  drawChankin();
+  //requestAnimFrame(render);
+}
+
+function drawChankin(){
+  gl.drawArrays(gl.LINE_STRIP, 0, chankinPath.length);
 }
