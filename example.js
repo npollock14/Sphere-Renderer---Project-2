@@ -15,6 +15,8 @@ var animation = false;
 var animationSpeed = 0.02;
 
 var localPointsArray = [];
+var modelTrans = mat4();
+var modelTransBuffer;
 var pointsArray = [];
 var chankinPath = [];
 var normalsArray = [];
@@ -152,6 +154,7 @@ function tetrahedron(a, b, c, d, n) {
 function makeBuffers() {
   vBuffer = gl.createBuffer();
   chankinBuffer = gl.createBuffer();
+  modelTransBuffer = gl.createBuffer();
   vPosition = gl.getAttribLocation(program, "vPosition");
   vNormal = gl.createBuffer();
   vNormalPosition = gl.getAttribLocation(program, "vNormal");
