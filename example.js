@@ -37,9 +37,9 @@ const vb = vec4(0.0, 0.942809, 0.333333, 1);
 const vc = vec4(-0.816497, -0.471405, 0.333333, 1);
 const vd = vec4(0.816497, -0.471405, 0.333333, 1);
 
-var elapsedTime = 0;
-var frameCount = 0;
-var lastTime = 0;
+var frameTime = 0;
+var frames = 0;
+var prevTime = 0;
 
 var lightPosition = vec4(0.0, 0.0, -10.0, 0.0);
 var lightAmbient = vec4(0.2, 0.2, 0.2, 1.0);
@@ -78,7 +78,7 @@ var eye = vec3(0, 0.0, 0);
 var at = vec3(0.0, 0.0, -1);
 var up = vec3(0.0, 1.0, 0.0);
 
-var lastTime = new Date().getTime();
+var prevTime = new Date().getTime();
 
 //creates and stores a triangle - calculates normals using newells method
 function triangle(a, b, c) {
@@ -400,16 +400,16 @@ window.addEventListener("keydown", function (event) {
 function calculateFPS() {
   var now = new Date().getTime();
 
-  elapsedTime = elapsedTime + now - lastTime;
+  frameTime = frameTime + now - prevTime;
 
-  lastTime = now;
+  prevTime = now;
 
-  frameCount++;
+  frames++;
   //if 1 second has passed set the FPS to the current frame count
-  if (elapsedTime / 1000 > 1) {
-    fps = frameCount;
-    frameCount = 0;
-    elapsedTime = 0;
+  if (frameTime / 1000 > 1) {
+    fps = frames;
+    frames = 0;
+    frameTime = 0;
     document.getElementById("fpsCounter").innerHTML = "FPS: " + fps;
   }
 }
