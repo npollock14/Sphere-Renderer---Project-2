@@ -15,6 +15,7 @@ var animation = false;
 var animationSpeed = 0.05;
 
 var localPointsArray = [];
+var loadedSubs = [];
 var pointsArray = [];
 var chankinPath = [];
 var normalsArray = [];
@@ -56,6 +57,7 @@ const chankinControls = [
 var projectionMatrix;
 var modelMatrix;
 var projectionMatrixLoc;
+var lightingModeLoc;
 var modelMatrixLoc;
 
 var vBuffer;
@@ -166,14 +168,30 @@ function makeBuffers() {
 }
 
 function updateModel(pos = modelPos) {
-  localPointsArray = [];
-  normalsArray = [];
-  gouraudNormals = [];
-  index = 0;
-  tetrahedron(va, vb, vc, vd, numTimesToSubdivide);
+  localPointsArray = loadedSubs[numTimesToSubdivide - 1]["points"];
+  normalsArray = loadedSubs[numTimesToSubdivide - 1]["normals"];
+  gouraudNormals = loadedSubs[numTimesToSubdivide - 1]["gnormals"];
+  index = loadedSubs[numTimesToSubdivide - 1]["index"];
+  //tetrahedron(va, vb, vc, vd, numTimesToSubdivide);
   setModelPos(pos);
   document.getElementById("modelSubs").innerHTML =
     "Model Subdivisions: " + numTimesToSubdivide;
+}
+
+function preloadSubdivisions() {
+  for (let i = 1; i <= 8; i++) {
+    localPointsArray = [];
+    normalsArray = [];
+    gouraudNormals = [];
+    index = 0;
+    tetrahedron(va, vb, vc, vd, i);
+    loadedSubs.push({
+      points: localPointsArray,
+      normals: normalsArray,
+      gnormals: gouraudNormals,
+      index: index,
+    });
+  }
 }
 
 function bufferModel() {
@@ -243,13 +261,16 @@ window.onload = function init() {
   var specularProduct = mult(lightSpecular, materialSpecular);
   var ambientProduct = mult(lightAmbient, materialAmbient);
 
+  preloadSubdivisions();
+
   updateChankin(false, true);
   bufferChankin();
-  updateModel(chankinPath[chankinPos]);
+  setModelPos(chankinPath[chankinPos]);
   bufferModel();
 
   projectionMatrixLoc = gl.getUniformLocation(program, "projectionMatrix");
   modelMatrixLoc = gl.getUniformLocation(program, "modelMatrix");
+  lightingModeLoc = gl.getUniformLocation(program, "lightingType");
 
   gl.uniform4fv(
     gl.getUniformLocation(program, "diffuseProduct"),
@@ -268,10 +289,20 @@ window.onload = function init() {
     flatten(lightPosition)
   );
   gl.uniform1f(gl.getUniformLocation(program, "shininess"), materialShininess);
-  gl.uniform1f(gl.getUniformLocation(program, "lightingType"), lightingMode);
+  gl.uniform1f(lightingModeLoc, lightingMode);
+
+  // perspecive projection
+  projectionMatrix = perspective(90, 1, 0.1, 100);
+
+  gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
 
   document.getElementById("animationStatus").innerHTML =
     "Animation: " + animation;
+
+  document.getElementById("modelSubs").innerHTML =
+    "Model Subdivisions: " + numTimesToSubdivide;
+
+  setLightingMode(lightingMode);
 
   render();
 };
@@ -360,11 +391,6 @@ function render() {
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  // perspecive projection
-  projectionMatrix = perspective(90, 1, 0.1, 100);
-
-  gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
-
   gl.uniformMatrix4fv(modelMatrixLoc, false, flatten(mat4()));
 
   drawChankin();
@@ -374,33 +400,33 @@ function render() {
   drawModel();
 
   if (animation) {
-    //get the next position in the chankin path to determine the direction of travel
-    let nextPos = (chankinPos + 1) % chankinPath.length;
-    //get the vector between the current position and the next position
-    let dir = subtract(chankinPath[nextPos], chankinPath[chankinPos]);
-
-    //get the direction between the current model position and the next position
-    let modelDir = subtract(chankinPath[nextPos], modelPos);
-
-    //if dir and modelDir are in opposite directions, then we have reached the end of this path
-    if (dot(dir, modelDir) < 0) {
-      //set the model position to the next position in the chankin path
-      chankinPos++;
-      chankinPos %= chankinPath.length;
-      setModelPos(chankinPath[chankinPos]);
-      bufferModel();
-      nextPos = (chankinPos + 1) % chankinPath.length;
-      dir = subtract(chankinPath[nextPos], chankinPath[chankinPos]);
-    }
-    //get a unit vector in the direction of travel
-    dir = normalize(dir);
-    //multiply the direction by the speed to the velocity
-    dir = scale(animationSpeed, dir);
-    setModelPos(add(modelPos, dir));
-    bufferModel();
+    animate();
   }
 
   requestAnimFrame(render);
+}
+
+function animate() {
+  //get the next position in the chankin path to determine the direction of travel
+  let nextPos = (chankinPos + 1) % chankinPath.length;
+  //get the vector between the current position and the next position
+  let dir = subtract(chankinPath[nextPos], chankinPath[chankinPos]);
+  //get the direction between the current model position and the next position
+  let modelDir = subtract(chankinPath[nextPos], modelPos);
+  //if dir and modelDir are in opposite directions, then we have reached the end of this path
+  if (dot(dir, modelDir) < 0) {
+    //set the model position to the next position in the chankin path
+    chankinPos++;
+    chankinPos %= chankinPath.length;
+    setModelPos(chankinPath[chankinPos]);
+    nextPos = (chankinPos + 1) % chankinPath.length;
+    dir = subtract(chankinPath[nextPos], chankinPath[chankinPos]);
+  }
+  //get a unit vector in the direction of travel
+  dir = normalize(dir);
+  //multiply the direction by the speed to get the velocity
+  dir = scale(animationSpeed, dir);
+  setModelPos(add(modelPos, dir));
 }
 
 function drawModel() {
@@ -408,25 +434,23 @@ function drawModel() {
   gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vPosition);
   if (lightingMode == 0) {
-    for (var i = 0; i < index; i += 3) {
-      gl.drawArrays(gl.LINE_STRIP, i, 3);
-    }
+    gl.drawArrays(gl.LINE_STRIP, 0, index);
   } else {
-    for (var i = 0; i < index; i += 3) gl.drawArrays(gl.TRIANGLES, i, 3);
+    gl.drawArrays(gl.TRIANGLES, 0, index);
   }
 }
 
 function drawChankin() {
-  setLightingMode(0);
+  gl.uniform1f(lightingModeLoc, 0);
   gl.bindBuffer(gl.ARRAY_BUFFER, chankinBuffer);
   gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vPosition);
   gl.drawArrays(gl.LINE_LOOP, 0, chankinPath.length);
-  setLightingMode(lightingMode);
+  gl.uniform1f(lightingModeLoc, lightingMode);
 }
 
 function setLightingMode(mode) {
-  gl.uniform1f(gl.getUniformLocation(program, "lightingType"), mode);
+  gl.uniform1f(lightingModeLoc, mode);
   document.getElementById("lightingType").innerHTML =
     "Lighting Style: " + lightingModeStrings[mode];
 }
