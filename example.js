@@ -1,3 +1,9 @@
+/*
+EXTRA CREDIT:
+- added a function to load each sphere subdivision into memory at the start of the program to reduce lag
+- added an "info panel" to display some status information in the browser incuding an fps counter
+*/
+
 var canvas;
 var gl;
 
@@ -72,6 +78,9 @@ var eye = vec3(0, 0.0, 0);
 var at = vec3(0.0, 0.0, -1);
 var up = vec3(0.0, 1.0, 0.0);
 
+var lastTime = new Date().getTime();
+
+//creates and stores a triangle - calculates normals using newells method
 function triangle(a, b, c) {
   localPointsArray.push(a);
   localPointsArray.push(b);
@@ -91,6 +100,7 @@ function triangle(a, b, c) {
   index += 3;
 }
 
+//calculates the normal of a triangle using newell's method
 function getNewellNormal(pts) {
   let normal = vec4(0.0, 0.0, 0.0, 0.0);
   for (let i = 0; i < 3; i++) {
@@ -106,23 +116,25 @@ function getNewellNormal(pts) {
   return vec4(-normal[0], -normal[1], -normal[2], 0.0);
 }
 
-//perform chankin subdivision on a set of controll points
-// use 1/4 and 3/4 mixings for the new points
+//perform chankin subdivision on a set of control points
+//uses 1/4 and 3/4 mixings for the new points
 function chankinSubDivide(pts, n) {
   if (n > 0) {
     let newPts = [];
     for (let i = 0; i < pts.length; i++) {
+      //calculate the new points using the 1/4 and 3/4 mixings
       let p1 = mix(pts[i], pts[(i + 1) % pts.length], 0.25);
       let p2 = mix(pts[i], pts[(i + 1) % pts.length], 0.75);
       newPts.push(p1);
       newPts.push(p2);
     }
-    return chankinSubDivide(newPts, n - 1);
+    return chankinSubDivide(newPts, n - 1); //recursive call
   } else {
     return pts;
   }
 }
 
+//creates a vector from an array of points - used for the chankin path
 function controlToVector(chankinControls) {
   resArray = [];
   for (let i = 0; i < chankinControls.length; i++) {
@@ -131,6 +143,8 @@ function controlToVector(chankinControls) {
   return resArray;
 }
 
+//performs subdivision on a triangle recursively
+//is from the sample code provided in lecture
 function divideTriangle(a, b, c, count) {
   if (count > 0) {
     var ab = mix(a, b, 0.5);
@@ -150,6 +164,7 @@ function divideTriangle(a, b, c, count) {
   }
 }
 
+//recursivley divides triangles in a tetrahedron
 function tetrahedron(a, b, c, d, n) {
   divideTriangle(a, b, c, n);
   divideTriangle(d, c, b, n);
@@ -157,6 +172,7 @@ function tetrahedron(a, b, c, d, n) {
   divideTriangle(a, c, d, n);
 }
 
+//creates all of the buffers needed
 function makeBuffers() {
   vBuffer = gl.createBuffer();
   chankinBuffer = gl.createBuffer();
@@ -167,17 +183,19 @@ function makeBuffers() {
   vNormalGPosition = gl.getAttribLocation(program, "vNormalG");
 }
 
+//updates the models points, normals, ect. and position matrix
 function updateModel(pos = modelPos) {
+  //uses the preloaded subdivisions to update the model
   localPointsArray = loadedSubs[numTimesToSubdivide - 1]["points"];
   normalsArray = loadedSubs[numTimesToSubdivide - 1]["normals"];
   gouraudNormals = loadedSubs[numTimesToSubdivide - 1]["gnormals"];
   index = loadedSubs[numTimesToSubdivide - 1]["index"];
-  //tetrahedron(va, vb, vc, vd, numTimesToSubdivide);
   setModelPos(pos);
   document.getElementById("modelSubs").innerHTML =
     "Model Subdivisions: " + numTimesToSubdivide;
 }
 
+//preloads the models subdivisions
 function preloadSubdivisions() {
   for (let i = 1; i <= 8; i++) {
     localPointsArray = [];
@@ -194,6 +212,7 @@ function preloadSubdivisions() {
   }
 }
 
+//updates the model's buffers
 function bufferModel() {
   gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, flatten(localPointsArray), gl.STATIC_DRAW);
@@ -214,28 +233,35 @@ function bufferModel() {
   gl.enableVertexAttribArray(vNormalGPosition);
 }
 
+//updates the chankin path after a change in the number of subdivisions
 function updateChankin(increaseSubs, init = false) {
   chankinPath = [];
   let chankinVecs = controlToVector(chankinControls);
   chankinPath = chankinSubDivide(chankinVecs, chankinSubDivisions);
   if (!init) {
+    //will reposition the models position if the chankin path is changed
+    //uses 2x the current position because chankin subdivisions increase the number of points by a factor of 2
     if (increaseSubs) {
-      chankinPos = (chankinPos * 2) % chankinPath.length;
+      //multiply by 2
+      chankinPos = Math.floor(chankinPos * 2) % chankinPath.length;
     } else {
       //divide by 2 and round down
       chankinPos = Math.floor(chankinPos / 2) % chankinPath.length;
     }
   }
+  //sets the models position to a point on the chankin path
   setModelPos(chankinPath[chankinPos]);
   document.getElementById("pathSubs").innerHTML =
     "Path Subdivisions: " + chankinSubDivisions;
 }
 
+//updates the chankin buffers
 function bufferChankin() {
   gl.bindBuffer(gl.ARRAY_BUFFER, chankinBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, flatten(chankinPath), gl.STATIC_DRAW);
 }
 
+//when the window is loaded
 window.onload = function init() {
   canvas = document.getElementById("gl-canvas");
 
@@ -291,11 +317,11 @@ window.onload = function init() {
   gl.uniform1f(gl.getUniformLocation(program, "shininess"), materialShininess);
   gl.uniform1f(lightingModeLoc, lightingMode);
 
-  // perspecive projection
+  // perspecive projection matrix with fov of 90 degrees, aspect ratio of 1, near plane of 0.1, and far plane of 100
   projectionMatrix = perspective(90, 1, 0.1, 100);
-
   gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
 
+  //initialize some info panel variables
   document.getElementById("animationStatus").innerHTML =
     "Animation: " + animation;
 
@@ -307,10 +333,10 @@ window.onload = function init() {
   render();
 };
 
-// add key down event listener
+// key event listener
 window.addEventListener("keydown", function (event) {
   switch (event.key) {
-    case "m":
+    case "m": //toggle wireframe
       if (lightingMode == 0) {
         lightingMode = prevMode;
       } else {
@@ -321,7 +347,7 @@ window.addEventListener("keydown", function (event) {
       setLightingMode(lightingMode);
 
       break;
-    case "l":
+    case "l": //toggle lighting mode
       if (lightingMode == 1) {
         lightingMode = 2;
       } else if (lightingMode == 2) {
@@ -370,42 +396,46 @@ window.addEventListener("keydown", function (event) {
       break;
   }
 });
-lastTime = new Date().getTime();
-function render() {
-  //calculate FPS and display it
+
+function calculateFPS() {
   var now = new Date().getTime();
 
-  frameCount++;
-  elapsedTime += now - lastTime;
+  elapsedTime = elapsedTime + now - lastTime;
 
   lastTime = now;
 
-  if (elapsedTime >= 1000) {
+  frameCount++;
+  //if 1 second has passed set the FPS to the current frame count
+  if (elapsedTime / 1000 > 1) {
     fps = frameCount;
     frameCount = 0;
-    elapsedTime -= 1000;
-
+    elapsedTime = 0;
     document.getElementById("fpsCounter").innerHTML = "FPS: " + fps;
   }
-  //done calculating FPS
+}
+
+function render() {
+  //calculate FPS and display it
+  calculateFPS();
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  gl.uniformMatrix4fv(modelMatrixLoc, false, flatten(mat4()));
-
+  //draw the path
   drawChankin();
 
-  gl.uniformMatrix4fv(modelMatrixLoc, false, flatten(modelMatrix));
-
+  //draw the model
   drawModel();
 
+  //if we are animating, perform the animation
   if (animation) {
     animate();
   }
 
+  //call the render function again
   requestAnimFrame(render);
 }
 
+//animates the model along the path
 function animate() {
   //get the next position in the chankin path to determine the direction of travel
   let nextPos = (chankinPos + 1) % chankinPath.length;
@@ -429,7 +459,9 @@ function animate() {
   setModelPos(add(modelPos, dir));
 }
 
+//draws the model
 function drawModel() {
+  gl.uniformMatrix4fv(modelMatrixLoc, false, flatten(modelMatrix));
   gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
   gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vPosition);
@@ -440,7 +472,9 @@ function drawModel() {
   }
 }
 
+//draws the chankin path
 function drawChankin() {
+  gl.uniformMatrix4fv(modelMatrixLoc, false, flatten(mat4()));
   gl.uniform1f(lightingModeLoc, 0);
   gl.bindBuffer(gl.ARRAY_BUFFER, chankinBuffer);
   gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
@@ -449,12 +483,14 @@ function drawChankin() {
   gl.uniform1f(lightingModeLoc, lightingMode);
 }
 
+//sets the lighting mode
 function setLightingMode(mode) {
   gl.uniform1f(lightingModeLoc, mode);
   document.getElementById("lightingType").innerHTML =
     "Lighting Style: " + lightingModeStrings[mode];
 }
 
+//sets the model position and matrix
 function setModelPos(pos) {
   modelPos = pos;
   modelMatrix = translate(modelPos[0], modelPos[1], modelPos[2]);
