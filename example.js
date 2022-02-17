@@ -1,8 +1,8 @@
 var canvas;
 var gl;
 
-var numTimesToSubdivide = 5;
-var chankinSubDivisions = 3;
+var numTimesToSubdivide = 4;
+var chankinSubDivisions = 0;
 
 var lightingMode = 2; // 0 is wireframe, 1 is gouraud, 2 is phong
 var lightingModeStrings = ["wireframe", "gouraud", "phong"];
@@ -12,18 +12,16 @@ var index = 0;
 var alpha = 0;
 
 var animation = false;
-var animationSpeed = 0.02;
+var animationSpeed = 0.05;
 
 var localPointsArray = [];
-var modelTrans = mat4();
-var modelTransBuffer;
 var pointsArray = [];
 var chankinPath = [];
 var normalsArray = [];
 var gouraudNormals = [];
 
-var modelPos;
-var chankinPos = 4;
+var modelPos = [0, 0, 0];
+var chankinPos = 0;
 
 var program;
 
@@ -31,6 +29,10 @@ const va = vec4(0.0, 0.0, -1.0, 1);
 const vb = vec4(0.0, 0.942809, 0.333333, 1);
 const vc = vec4(-0.816497, -0.471405, 0.333333, 1);
 const vd = vec4(0.816497, -0.471405, 0.333333, 1);
+
+var elapsedTime = 0;
+var frameCount = 0;
+var lastTime = 0;
 
 var lightPosition = vec4(0.0, 0.0, -10.0, 0.0);
 var lightAmbient = vec4(0.2, 0.2, 0.2, 1.0);
@@ -52,7 +54,9 @@ const chankinControls = [
 ];
 
 var projectionMatrix;
+var modelMatrix;
 var projectionMatrixLoc;
+var modelMatrixLoc;
 
 var vBuffer;
 var chankinBuffer;
@@ -154,7 +158,6 @@ function tetrahedron(a, b, c, d, n) {
 function makeBuffers() {
   vBuffer = gl.createBuffer();
   chankinBuffer = gl.createBuffer();
-  modelTransBuffer = gl.createBuffer();
   vPosition = gl.getAttribLocation(program, "vPosition");
   vNormal = gl.createBuffer();
   vNormalPosition = gl.getAttribLocation(program, "vNormal");
@@ -169,11 +172,13 @@ function updateModel(pos = modelPos) {
   index = 0;
   tetrahedron(va, vb, vc, vd, numTimesToSubdivide);
   setModelPos(pos);
+  document.getElementById("modelSubs").innerHTML =
+    "Model Subdivisions: " + numTimesToSubdivide;
 }
 
 function bufferModel() {
   gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, flatten(pointsArray), gl.STATIC_DRAW);
+  gl.bufferData(gl.ARRAY_BUFFER, flatten(localPointsArray), gl.STATIC_DRAW);
 
   gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(vPosition);
@@ -204,6 +209,8 @@ function updateChankin(increaseSubs, init = false) {
     }
   }
   setModelPos(chankinPath[chankinPos]);
+  document.getElementById("pathSubs").innerHTML =
+    "Path Subdivisions: " + chankinSubDivisions;
 }
 
 function bufferChankin() {
@@ -242,6 +249,7 @@ window.onload = function init() {
   bufferModel();
 
   projectionMatrixLoc = gl.getUniformLocation(program, "projectionMatrix");
+  modelMatrixLoc = gl.getUniformLocation(program, "modelMatrix");
 
   gl.uniform4fv(
     gl.getUniformLocation(program, "diffuseProduct"),
@@ -261,6 +269,9 @@ window.onload = function init() {
   );
   gl.uniform1f(gl.getUniformLocation(program, "shininess"), materialShininess);
   gl.uniform1f(gl.getUniformLocation(program, "lightingType"), lightingMode);
+
+  document.getElementById("animationStatus").innerHTML =
+    "Animation: " + animation;
 
   render();
 };
@@ -288,15 +299,15 @@ window.addEventListener("keydown", function (event) {
       console.log("lighting mode: " + lightingModeStrings[lightingMode]);
       setLightingMode(lightingMode);
       break;
-    case "q": //decrease subdivisions
-      if (numTimesToSubdivide > 0) {
+    case "q": //decrease model subdivisions
+      if (numTimesToSubdivide > 1) {
         numTimesToSubdivide--;
         updateModel();
         bufferModel();
         console.log("subdivisions: " + numTimesToSubdivide);
       }
       break;
-    case "e": //increase subdivisions
+    case "e": //increase model subdivisions
       if (numTimesToSubdivide < 8) {
         numTimesToSubdivide++;
         updateModel();
@@ -304,33 +315,49 @@ window.addEventListener("keydown", function (event) {
         console.log("subdivisions: " + numTimesToSubdivide);
       }
       break;
-    case "i": //increase subdivisions
+    case "i": //increase path subdivisions
       if (chankinSubDivisions < 8) {
         chankinSubDivisions++;
         updateChankin(true);
         bufferChankin();
-        bufferModel();
-        // setModelPos(chankinPath[chankinPos]); // TODO: fix this
         console.log("subdivisions: " + chankinSubDivisions);
       }
       break;
-    case "j": //decrease subdivisions
+    case "j": //decrease path subdivisions
       if (chankinSubDivisions > 0) {
         chankinSubDivisions--;
         updateChankin(false);
         bufferChankin();
-        bufferModel();
         console.log("subdivisions: " + chankinSubDivisions);
       }
       break;
     case "a": //toggle animation
       animation = !animation;
       console.log("animation: " + animation);
+      document.getElementById("animationStatus").innerHTML =
+        "Animation: " + animation;
       break;
   }
 });
-
+lastTime = new Date().getTime();
 function render() {
+  //calculate FPS and display it
+  var now = new Date().getTime();
+
+  frameCount++;
+  elapsedTime += now - lastTime;
+
+  lastTime = now;
+
+  if (elapsedTime >= 1000) {
+    fps = frameCount;
+    frameCount = 0;
+    elapsedTime -= 1000;
+
+    document.getElementById("fpsCounter").innerHTML = "FPS: " + fps;
+  }
+  //done calculating FPS
+
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   // perspecive projection
@@ -338,7 +365,11 @@ function render() {
 
   gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
 
+  gl.uniformMatrix4fv(modelMatrixLoc, false, flatten(mat4()));
+
   drawChankin();
+
+  gl.uniformMatrix4fv(modelMatrixLoc, false, flatten(modelMatrix));
 
   drawModel();
 
@@ -360,7 +391,6 @@ function render() {
       bufferModel();
       nextPos = (chankinPos + 1) % chankinPath.length;
       dir = subtract(chankinPath[nextPos], chankinPath[chankinPos]);
-      console.log("Here");
     }
     //get a unit vector in the direction of travel
     dir = normalize(dir);
@@ -397,15 +427,11 @@ function drawChankin() {
 
 function setLightingMode(mode) {
   gl.uniform1f(gl.getUniformLocation(program, "lightingType"), mode);
+  document.getElementById("lightingType").innerHTML =
+    "Lighting Style: " + lightingModeStrings[mode];
 }
 
 function setModelPos(pos) {
   modelPos = pos;
-  pointsArray = [];
-  let centerOffset = vec4(0, 0, 0, 0.0);
-  //offset all points in point array by modelPos
-  for (var i = 0; i < localPointsArray.length; i++) {
-    pointsArray[i] = add(localPointsArray[i], modelPos);
-    pointsArray[i] = add(pointsArray[i], centerOffset);
-  }
+  modelMatrix = translate(modelPos[0], modelPos[1], modelPos[2]);
 }

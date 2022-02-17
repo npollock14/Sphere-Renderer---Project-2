@@ -18,6 +18,7 @@ uniform vec4 ambientProduct, diffuseProduct, specularProduct;
 
 uniform vec4 lightPosition;
 uniform mat4 projectionMatrix;
+uniform mat4 modelMatrix;
 uniform float lightingType;
 uniform float shininess;
 
@@ -31,15 +32,15 @@ varying vec3 L, N, V;
 void main()
 {
     if(lightingType == 2.0){  //phong
-    vec3 pos = (vPosition).xyz;
+    vec3 pos = (modelMatrix * vPosition).xyz;
     L = normalize(lightPosition.xyz - pos);
     N = normalize(vNormal).xyz;
     V = normalize(-pos);
 
-    gl_Position = projectionMatrix * vPosition;
+    gl_Position = projectionMatrix * modelMatrix * vPosition;
     }else if(lightingType == 1.0){ //gouraud
         //Diffuse
-    vec3 pos = (vPosition).xyz; // was originally flatShading
+    vec3 pos = (modelMatrix * vPosition).xyz; // was originally flatShading
     L = normalize(lightPosition.xyz - pos);
     N = normalize(vNormalG).xyz;
     V =  normalize(-pos);
@@ -53,11 +54,11 @@ void main()
     //Ambient
     vec4 ambient = ambientProduct;
 
-    gl_Position = projectionMatrix * vPosition;
+    gl_Position = projectionMatrix * modelMatrix * vPosition;
 	fColor = diffuse + ambient + specular;
 	fColor.a = 1.0;
     }else if(lightingType == 0.0){ //flat or wireframe mode
-        gl_Position = projectionMatrix * vPosition;
+        gl_Position = projectionMatrix * modelMatrix *  vPosition;
     }
 }
 </script>
@@ -104,8 +105,34 @@ void main()
 <script type="text/javascript" src="example.js"></script>
 
 <body>
-<canvas id="gl-canvas" width="1000" height="1000">
+    <div style="
+    display: flex;
+    flex-direction: column; 
+    justify-content: center;
+    align-items: center;
+    ">
+    <h1 style="margin-bottom: 0;">Computer Graphics Project 2</h1>
+    <p style="font-size:medium; margin-bottom: 30px;">By: Nathan Pollock</p>
+    <div style="display: flex; flex-direction: row; gap: 20px;">
+<div id="fpsCounter" style="font-size:small;">fps</div>
+<div id="lightingType" style="font-size:small;">lightingType</div>
+<div id="modelSubs" style="font-size:small;">modelSubs</div>
+<div id="pathSubs" style="font-size:small;">pathSubs</div>
+<div id="animationStatus" style="font-size:small;">animationStatus</div>
+
+</div>
+    
+<canvas style="border: 1px solid white; border-radius: 10px;" id="gl-canvas" width="1000" height="1000">
 Epic fail!
 </canvas>
+<h3 style="margin:5px;">Controls:</h3>
+<p style="margin:0px">Toggle WIREFRAME: "m"  <br>
+Toggle LIGHTING mode: "l" <br>
+Increase/Decrease SPHERE Subdivisions: "e"/"q" <br>
+Increase/Decrease PATH Subdivisions: "i"/"j"</p>
+</div>
+
+
+
 </body>
 </html>
