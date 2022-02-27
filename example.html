@@ -1,138 +1,142 @@
 <!DOCTYPE html>
 <html>
+  <script id="vertex-shader" type="x-shader/x-vertex">
 
-<script id="vertex-shader" type="x-shader/x-vertex">
+    // assume both position and normal are in homogeneous form
+    precision mediump float;
 
-// assume both position and normal are in homogeneous form
-precision mediump float;
+    attribute vec4 vPosition;
 
-attribute vec4 vPosition;
-
-attribute vec4 vNormal;
-attribute vec4 vNormalG;
-
-
-
-uniform vec4 ambientProduct, diffuseProduct, specularProduct;
-
-
-uniform vec4 lightPosition;
-uniform mat4 projectionMatrix;
-uniform mat4 modelMatrix;
-uniform float lightingType;
-uniform float shininess;
+    attribute vec4 vNormal;
+    attribute vec4 vNormalG;
 
 
 
-varying vec4 fColor;
-varying vec3 L, N, V;
+    uniform vec4 ambientProduct, diffuseProduct, specularProduct;
+
+
+    uniform vec4 lightPosition;
+    uniform mat4 projectionMatrix;
+    uniform mat4 modelMatrix;
+    uniform float lightingType;
+    uniform float shininess;
 
 
 
-void main()
-{
-    if(lightingType == 2.0){  //phong
-    vec3 pos = (modelMatrix * vPosition).xyz;
-    L = normalize(lightPosition.xyz - pos);
-    N = normalize(vNormal).xyz;
-    V = normalize(-pos);
+    varying vec4 fColor;
+    varying vec3 L, N, V;
 
-    gl_Position = projectionMatrix * modelMatrix * vPosition;
-    }else if(lightingType == 1.0){ //gouraud
-        //Diffuse
-    vec3 pos = (modelMatrix * vPosition).xyz; // was originally flatShading
-    L = normalize(lightPosition.xyz - pos);
-    N = normalize(vNormalG).xyz;
-    V =  normalize(-pos);
 
-    vec4 diffuse = diffuseProduct * dot(L, N);
 
-    //Specular
-    vec3 R = (2.0 * dot(L, N) * N) - L;
-    vec4 specular = specularProduct * pow(max(dot(V, R), 0.0), shininess);
+    void main()
+    {
+        if(lightingType == 2.0){  //phong
+        vec3 pos = (modelMatrix * vPosition).xyz;
+        L = normalize(lightPosition.xyz - pos);
+        N = normalize(vNormal).xyz;
+        V = normalize(-pos);
 
-    //Ambient
-    vec4 ambient = ambientProduct;
+        gl_Position = projectionMatrix * modelMatrix * vPosition;
+        }else if(lightingType == 1.0){ //gouraud
+            //Diffuse
+        vec3 pos = (modelMatrix * vPosition).xyz; // was originally flatShading
+        L = normalize(lightPosition.xyz - pos);
+        N = normalize(vNormalG).xyz;
+        V =  normalize(-pos);
 
-    gl_Position = projectionMatrix * modelMatrix * vPosition;
-	fColor = diffuse + ambient + specular;
-	fColor.a = 1.0;
-    }else if(lightingType == 0.0){ //flat or wireframe mode
-        gl_Position = projectionMatrix * modelMatrix *  vPosition;
+        vec4 diffuse = diffuseProduct * dot(L, N);
+
+        //Specular
+        vec3 R = (2.0 * dot(L, N) * N) - L;
+        vec4 specular = specularProduct * pow(max(dot(V, R), 0.0), shininess);
+
+        //Ambient
+        vec4 ambient = ambientProduct;
+
+        gl_Position = projectionMatrix * modelMatrix * vPosition;
+    	fColor = diffuse + ambient + specular;
+    	fColor.a = 1.0;
+        }else if(lightingType == 0.0){ //flat or wireframe mode
+            gl_Position = projectionMatrix * modelMatrix *  vPosition;
+        }
     }
-}
-</script>
+  </script>
 
-<script id="fragment-shader" type="x-shader/x-fragment">
+  <script id="fragment-shader" type="x-shader/x-fragment">
 
-precision mediump float;
+    precision mediump float;
 
-uniform vec4 ambientProduct, diffuseProduct, specularProduct;
-uniform float shininess;
-uniform float lightingType;
+    uniform vec4 ambientProduct, diffuseProduct, specularProduct;
+    uniform float shininess;
+    uniform float lightingType;
 
-varying vec3 L, N, V;
-varying vec4 fColor;
+    varying vec3 L, N, V;
+    varying vec4 fColor;
 
 
-void main()
-{
+    void main()
+    {
 
-    if(lightingType == 2.0){  //phong
-	vec3 R = (2.0 * dot(L, N) * N) - L;
-    vec4 diffuse = diffuseProduct * dot(L, N);
-    vec4 ambient = ambientProduct;
-    vec4 specular = specularProduct * pow(max(dot(V, R), 0.0), shininess);
+        if(lightingType == 2.0){  //phong
+    	vec3 R = (2.0 * dot(L, N) * N) - L;
+        vec4 diffuse = diffuseProduct * dot(L, N);
+        vec4 ambient = ambientProduct;
+        vec4 specular = specularProduct * pow(max(dot(V, R), 0.0), shininess);
 
-    vec4 fColor = diffuse + specular + ambient;
-    fColor.a = 1.0;
-    gl_FragColor = fColor;
-
-    }else if(lightingType == 1.0){ //gouraud
+        vec4 fColor = diffuse + specular + ambient;
+        fColor.a = 1.0;
         gl_FragColor = fColor;
-    }else if(lightingType == 0.0){ //flat or wireframe mode
-        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+
+        }else if(lightingType == 1.0){ //gouraud
+            gl_FragColor = fColor;
+        }else if(lightingType == 0.0){ //flat or wireframe mode
+            gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+        }
+
+
     }
+  </script>
 
+  <script type="text/javascript" src="lib/webgl-utils.js"></script>
+  <script type="text/javascript" src="lib/initShaders.js"></script>
 
-}
-</script>
+  <script type="text/javascript" src="lib/MV.js"></script>
+  <script type="text/javascript" src="example.js"></script>
 
-<script type="text/javascript" src="lib/webgl-utils.js"></script>
-<script type="text/javascript" src="lib/initShaders.js"></script>
+  <body>
+    <div
+      style="
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      "
+    >
+      <h1 style="margin-bottom: 0">Computer Graphics Project 2</h1>
+      <p style="font-size: medium; margin-bottom: 30px">By: Nathan Pollock</p>
+      <div style="display: flex; flex-direction: row; gap: 20px">
+        <div id="fpsCounter" style="font-size: small">fps</div>
+        <div id="lightingType" style="font-size: small">lightingType</div>
+        <div id="modelSubs" style="font-size: small">modelSubs</div>
+        <div id="pathSubs" style="font-size: small">pathSubs</div>
+        <div id="animationStatus" style="font-size: small">animationStatus</div>
+      </div>
 
-<script type="text/javascript" src="lib/MV.js"></script>
-<script type="text/javascript" src="example.js"></script>
-
-<body>
-    <div style="
-    display: flex;
-    flex-direction: column; 
-    justify-content: center;
-    align-items: center;
-    ">
-    <h1 style="margin-bottom: 0;">Computer Graphics Project 2</h1>
-    <p style="font-size:medium; margin-bottom: 30px;">By: Nathan Pollock</p>
-    <div style="display: flex; flex-direction: row; gap: 20px;">
-<div id="fpsCounter" style="font-size:small;">fps</div>
-<div id="lightingType" style="font-size:small;">lightingType</div>
-<div id="modelSubs" style="font-size:small;">modelSubs</div>
-<div id="pathSubs" style="font-size:small;">pathSubs</div>
-<div id="animationStatus" style="font-size:small;">animationStatus</div>
-
-</div>
-    
-<canvas style="border: 1px solid white; border-radius: 10px;" id="gl-canvas" width="1000" height="1000">
-Epic fail!
-</canvas>
-<h3 style="margin:5px;">Controls:</h3>
-<p style="margin:0px">Toggle WIREFRAME: "m"  <br>
-Toggle LIGHTING mode: "l" <br>
-Increase/Decrease SPHERE Subdivisions: "e"/"q" <br>
-Increase/Decrease PATH Subdivisions: "i"/"j"</p>
-</div>
-
-
-
-</body>
+      <canvas
+        style="border: 1px solid white; border-radius: 10px"
+        id="gl-canvas"
+        width="1000"
+        height="1000"
+      >
+        Epic fail!
+      </canvas>
+      <h3 style="margin: 5px">Controls:</h3>
+      <p style="margin: 0px">
+        Toggle WIREFRAME: "m" <br />
+        Toggle LIGHTING mode: "l" <br />
+        Increase/Decrease SPHERE Subdivisions: "e"/"q" <br />
+        Increase/Decrease PATH Subdivisions: "i"/"j"
+      </p>
+    </div>
+  </body>
 </html>
